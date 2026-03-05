@@ -15,11 +15,17 @@ func main() {
 	   "Jones, Jess",
 	   "Wonders, Alice",
 	}
-	scores := []int{87, 96, 64}
+	// scores := []int{87, 96, 64}
+	scores := map[string]int {
+		students[0]: 87,
+		students[1]: 96,
+		students[2]: 64,
+
+	}
 
 	fmt.Println("Student scores")
 	fmt.Println(strings.Repeat("-", 14))
-	fmt.Println(students[0], scores[0])
-	fmt.Println(students[1], scores[1])
-	fmt.Println(students[2], scores[2])
+	fmt.Println(students[0], scores[students[0]])
+	fmt.Println(students[1], scores[students[1]])
+	fmt.Println(students[2], scores[students[2]])
 }
