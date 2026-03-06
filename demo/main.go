@@ -17,11 +17,11 @@ func main() {
 	// var score = 87
 	// score := 87
 	// name, score := "Doe, Bob", 87
-	students := []string{
-		 "Doe, Bob",
-	   "Jones, Jess",
-	   "Wonders, Alice",
-	}
+	// students := []string{
+	// 	 "Doe, Bob",
+	//    "Jones, Jess",
+	//    "Wonders, Alice",
+	// }
 	// scores := []int{87, 96, 64}
 	// scores := map[string]int {
 	// 	students[0]: 87,
@@ -42,4 +42,7 @@ func main() {
 	// fmt.Println(students[0], scores[students[0]])
 	// fmt.Println(students[1], scores[students[1]])
 	// fmt.Println(students[2], scores[students[2]])
+	fmt.Println(scores[0].name, scores[0].score)
+	fmt.Println(scores[1].name, scores[1].score)
+	fmt.Println(scores[2].name, scores[2].score)
 }
