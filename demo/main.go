@@ -6,26 +6,40 @@ import (
 )
 
 func main() {
+
+	type score struct {
+		name string
+		score int 
+	}
+
 	// var name string = "Doe, Bob"
 	// name := "Doe, Bob"
 	// var score = 87
 	// score := 87
 	// name, score := "Doe, Bob", 87
-	students := []string{"Doe, Bob",
+	students := []string{
+		 "Doe, Bob",
 	   "Jones, Jess",
 	   "Wonders, Alice",
 	}
 	// scores := []int{87, 96, 64}
-	scores := map[string]int {
-		students[0]: 87,
-		students[1]: 96,
-		students[2]: 64,
+	// scores := map[string]int {
+	// 	students[0]: 87,
+	// 	students[1]: 96,
+	// 	students[2]: 64,
+
+	// }
+	scores := []score {
+
+		 {name: "Doe, Bob", score: 87},
+	   {name: "Jones, Jess", score: 96},
+	   {name: "Wonders, Alice", score: 64},
 
 	}
 
 	fmt.Println("Student scores")
 	fmt.Println(strings.Repeat("-", 14))
-	fmt.Println(students[0], scores[students[0]])
-	fmt.Println(students[1], scores[students[1]])
-	fmt.Println(students[2], scores[students[2]])
+	// fmt.Println(students[0], scores[students[0]])
+	// fmt.Println(students[1], scores[students[1]])
+	// fmt.Println(students[2], scores[students[2]])
 }
