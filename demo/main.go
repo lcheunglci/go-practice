@@ -48,13 +48,14 @@ func main() {
 	// fmt.Println(students[2], scores[students[2]])
 
 	var index int 
-	if option == "1" { // should use strconv package in production
+	switch option {
+  case "1": // should use strconv package in production
 		index = 0
-	} else if option == "2" {
+	case "2":
 		index = 1
-	} else if option == "3" {
+	case "3":
 		index = 2
-	} else {
+	default:
 		fmt.Println("Unknown option, defaulting to 1")
 		index = 0
 	}
