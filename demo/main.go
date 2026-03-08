@@ -37,12 +37,29 @@ func main() {
 
 	}
 
+	fmt.Println("Select score to print (1 - 3):")
+	var option string
+	fmt.Scanln(&option)
+
 	fmt.Println("Student scores")
 	fmt.Println(strings.Repeat("-", 14))
 	// fmt.Println(students[0], scores[students[0]])
 	// fmt.Println(students[1], scores[students[1]])
 	// fmt.Println(students[2], scores[students[2]])
-	fmt.Println(scores[0].name, scores[0].score)
-	fmt.Println(scores[1].name, scores[1].score)
-	fmt.Println(scores[2].name, scores[2].score)
+
+	var index int 
+	if option == "1" { // should use strconv package in production
+		index = 0
+	} else if option == "2" {
+		index = 1
+	} else if option == "3" {
+		index = 2
+	} else {
+		fmt.Println("Unknown option, defaulting to 1")
+		index = 0
+	}
+	fmt.Println(scores[index].name, scores[index].score)
+	// fmt.Println(scores[0].name, scores[0].score)
+	// fmt.Println(scores[1].name, scores[1].score)
+	// fmt.Println(scores[2].name, scores[2].score)
 }
