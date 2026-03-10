@@ -37,8 +37,9 @@ func main() {
 		case "2":
 			fmt.Println("Student scores")
 			fmt.Println(strings.Repeat("-", 14))
-			fmt.Println(scores)
-
+			for _, s := range scores {
+				fmt.Println(s.name, s.score)
+			}
 		case "q":
 			//tell the loop to stop
 			shouldContinue = false
