@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-func main() {
+type score struct {
+	name  string
+	score int
+}
 
-	type score struct {
-		name  string
-		score int
-	}
+func main() {
 
 	scores := []score{}
 	shouldContinue := true
@@ -28,22 +28,33 @@ func main() {
 
 		switch option {
 		case "1":
-			fmt.Println("Enter a student name and score")
-			var name, rawScore string
-			fmt.Scanln(&name, &rawScore)
-			s, _ := strconv.Atoi(rawScore)
-			scores = append(scores, score{name: name, score: s})
+
+			scores = append(scores, addStudent())
 
 		case "2":
-			fmt.Println("Student scores")
-			fmt.Println(strings.Repeat("-", 14))
-			for _, s := range scores {
-				fmt.Println(s.name, s.score)
-			}
+			printReport(scores)
 		case "q":
 			//tell the loop to stop
 			shouldContinue = false
 		}
+	}
+
+}
+
+func addStudent() score {
+
+	fmt.Println("Enter a student name and score")
+	var name, rawScore string
+	fmt.Scanln(&name, &rawScore)
+	s, _ := strconv.Atoi(rawScore)
+	return score{name: name, score: s}
+}
+
+func printReport(scores []score) {
+	fmt.Println("Student scores")
+	fmt.Println(strings.Repeat("-", 14))
+	for _, s := range scores {
+		fmt.Println(s.name, s.score)
 	}
 
 }
