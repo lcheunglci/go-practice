@@ -59,6 +59,10 @@ func getOne(id int) (User, error) {
 	return User{}, fmt.Errorf("user not found with id %v", id)
 }
 
+func GetOne(id int) (User, error) {
+	return getOne(id)
+}
+
 func update(u User, id int) (User, error) {
 	m.Lock()
 	defer m.Unlock()
