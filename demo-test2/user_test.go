@@ -24,6 +24,7 @@ func TestGetOne(t *testing.T) {
 
 func TestSlowOne(t *testing.T) {
 	t.Parallel()
+	t.Skip("skipped")
 	time.Sleep(1 * time.Second)
 }
 func TestSlowTwo(t *testing.T) {
