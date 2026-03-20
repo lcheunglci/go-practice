@@ -15,14 +15,14 @@ func main() {
 		AvailableCredit: 5000,
 	}
 
-	err := payment.ProcessPayment(&cc, 10000)
+	err := cc.ProcessPayment(10000)
 	if err != nil {
 		log.Printf("Error processing payment: %v\n", err)
 	} else {
 		log.Printf("Process payment. Remaining credit: %v\n", cc.AvailableCredit)
 	}
 
-	err = payment.ProcessPayment(&cc, 500)
+	err = cc.ProcessPayment(500)
 	if err != nil {
 		log.Printf("Error processing payment: %v\n", err)
 	} else {

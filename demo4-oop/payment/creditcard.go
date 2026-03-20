@@ -11,7 +11,7 @@ type CreditCard struct {
 	AvailableCredit float32
 }
 
-func ProcessPayment(cc *CreditCard, amount float32) error {
+func (cc *CreditCard) ProcessPayment(amount float32) error {
 	if cc.AvailableCredit < amount {
 		return errors.New("Insufficient funds to complete payment")
 	}
