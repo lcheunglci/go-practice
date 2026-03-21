@@ -23,6 +23,10 @@ func NewCreditCard(ownerName, cardNumber string, expirationMonth, expirationYear
 	}
 }
 
+func (cc CreditCard) AvailableCredit() float32 {
+	return cc.availableCredit
+}
+
 func (cc *CreditCard) ProcessPayment(amount float32) error {
 	if cc.availableCredit < amount {
 		return errors.New("Insufficient funds to complete payment")
