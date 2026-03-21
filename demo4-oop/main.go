@@ -6,14 +6,14 @@ import (
 )
 
 func main() {
-	cc := payment.CreditCard{
-		OwnerName:       "Bob Doe",
-		CardNumber:      "1111-2222-3333-4444",
-		ExpirationMonth: 5,
-		ExpirationYear:  2026,
-		SecurityCode:    123,
-		AvailableCredit: 5000,
-	}
+	cc := payment.NewCreditCard(
+		"Bob Doe",
+		"1111-2222-3333-4444",
+		5,
+		2026,
+		123,
+		5000,
+	)
 
 	err := cc.ProcessPayment(10000)
 	if err != nil {

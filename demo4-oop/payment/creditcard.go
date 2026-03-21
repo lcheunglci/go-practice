@@ -3,19 +3,31 @@ package payment
 import "errors"
 
 type CreditCard struct {
-	OwnerName       string
-	CardNumber      string
-	ExpirationMonth int
-	ExpirationYear  int
-	SecurityCode    int
-	AvailableCredit float32
+	ownerName       string
+	cardNumber      string
+	expirationMonth int
+	expirationYear  int
+	securityCode    int
+	availableCredit float32
+}
+
+func NewCreditCard(ownerName, cardNumber string, expirationMonth, expirationYear, securityCode int, availableCredit float32) CreditCard {
+
+	return CreditCard{
+		ownerName:       ownerName,
+		cardNumber:      cardNumber,
+		expirationMonth: expirationMonth,
+		expirationYear:  expirationYear,
+		securityCode:    securityCode,
+		availableCredit: availableCredit,
+	}
 }
 
 func (cc *CreditCard) ProcessPayment(amount float32) error {
-	if cc.AvailableCredit < amount {
+	if cc.availableCredit < amount {
 		return errors.New("Insufficient funds to complete payment")
 	}
 
-	cc.AvailableCredit -= amount
+	cc.availableCredit -= amount
 	return nil
 }
