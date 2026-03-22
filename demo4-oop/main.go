@@ -5,8 +5,21 @@ import (
 	"log"
 )
 
+type PaymentProcessor interface {
+	ProcessPayment(amount float32) error
+}
+
+type Account interface {
+	Available() float32
+}
+
+type PaymentMethod interface {
+	PaymentProcessor
+	Account
+}
+
 func main() {
-	cc := payment.NewCreditCard(
+	var pm PaymentMethod = payment.NewCreditCard(
 		"Bob Doe",
 		"1111-2222-3333-4444",
 		5,
@@ -15,17 +28,19 @@ func main() {
 		5000,
 	)
 
-	err := cc.ProcessPayment(10000)
+	err := pm.ProcessPayment(10000)
 	if err != nil {
 		log.Printf("Error processing payment: %v\n", err)
 	} else {
-		log.Printf("Process payment. Remaining credit: %v\n", cc.AvailableCredit())
+		log.Printf("Process payment. Remaining credit: %v\n", pm.Available())
 	}
 
-	err = cc.ProcessPayment(500)
+	pm = payment.NewBankAccount("Bob Doe", "1234", 3500)
+
+	err = pm.ProcessPayment(500)
 	if err != nil {
 		log.Printf("Error processing payment: %v\n", err)
 	} else {
-		log.Printf("Process payment. Remaining credit: %v\n", cc.AvailableCredit())
+		log.Printf("Process payment. Remaining credit: %v\n", pm.Available())
 	}
 }

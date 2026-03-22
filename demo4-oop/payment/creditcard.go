@@ -11,9 +11,9 @@ type CreditCard struct {
 	availableCredit float32
 }
 
-func NewCreditCard(ownerName, cardNumber string, expirationMonth, expirationYear, securityCode int, availableCredit float32) CreditCard {
+func NewCreditCard(ownerName, cardNumber string, expirationMonth, expirationYear, securityCode int, availableCredit float32) *CreditCard {
 
-	return CreditCard{
+	return &CreditCard{
 		ownerName:       ownerName,
 		cardNumber:      cardNumber,
 		expirationMonth: expirationMonth,
@@ -23,7 +23,7 @@ func NewCreditCard(ownerName, cardNumber string, expirationMonth, expirationYear
 	}
 }
 
-func (cc CreditCard) AvailableCredit() float32 {
+func (cc CreditCard) Available() float32 {
 	return cc.availableCredit
 }
 
