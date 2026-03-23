@@ -2,6 +2,7 @@ package main
 
 import (
 	"demo4-oop/payment"
+	"fmt"
 	"log"
 )
 
@@ -42,5 +43,12 @@ func main() {
 		log.Printf("Error processing payment: %v\n", err)
 	} else {
 		log.Printf("Process payment. Remaining credit: %v\n", pm.Available())
+	}
+
+	switch m := pm.(type) {
+	case *payment.CreditCard:
+		fmt.Printf("CreditCard %T\n", m)
+	case *payment.BankAccount:
+		fmt.Printf("BankAccount %T\n", m)
 	}
 }
