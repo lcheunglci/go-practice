@@ -2,25 +2,29 @@ package payment
 
 import "errors"
 
-type BankAccount struct {
-	ownerName     string
-	accountNumber string
-	balance       float32
+type Float interface {
+	float32 | float64
 }
 
-func NewBankAccount(ownerName, accountNumber string, balance float32) *BankAccount {
-	return &BankAccount{
+type BankAccount[T Float] struct {
+	ownerName     string
+	accountNumber string
+	balance       T
+}
+
+func NewBankAccount[T Float](ownerName, accountNumber string, balance T) *BankAccount {
+	return &BankAccount[T]{
 		ownerName:     ownerName,
 		accountNumber: accountNumber,
 		balance:       balance,
 	}
 }
 
-func (ba BankAccount) Available() float32 {
+func (ba BankAccount[T]) Available() T {
 	return ba.balance
 }
 
-func (ba *BankAccount) ProcessPayment(amount float32) error {
+func (ba *BankAccount[T]) ProcessPayment(amount T) error {
 	if ba.balance >= amount {
 		ba.balance -= amount
 		return nil

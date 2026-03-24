@@ -6,21 +6,21 @@ import (
 	"log"
 )
 
-type PaymentProcessor interface {
-	ProcessPayment(amount float32) error
+type PaymentProcessor[T payment.Float] interface {
+	ProcessPayment(amount T) error
 }
 
 type Account interface {
-	Available() float32
+	Available() T
 }
 
-type PaymentMethod interface {
-	PaymentProcessor
-	Account
+type PaymentMethod[T payment.Float] interface {
+	PaymentProcessor[T]
+	Account[T]
 }
 
 func main() {
-	var pm PaymentMethod = payment.NewCreditCard(
+	var pm PaymentMethod[float64] = payment.NewCreditCard[T](
 		"Bob Doe",
 		"1111-2222-3333-4444",
 		5,
@@ -46,9 +46,9 @@ func main() {
 	}
 
 	switch m := pm.(type) {
-	case *payment.CreditCard:
+	case *payment.CreditCard[float64]:
 		fmt.Printf("CreditCard %T\n", m)
-	case *payment.BankAccount:
+	case *payment.BankAccount[float64]:
 		fmt.Printf("BankAccount %T\n", m)
 	}
 }
