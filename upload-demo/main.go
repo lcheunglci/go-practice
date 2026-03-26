@@ -2,20 +2,27 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	MaxFileSize     = 5 * 1024 * 1024 // 5MB
-	UploadDirectory = "/var/lib/mediagate/uploads"
+	MaxFileSize         = 5 * 1024 * 1024 // 5MB
+	UploadDirectory     = "/var/lib/mediagate/uploads"
+	TempDirectory       = "/var/lib/mediagate/temp"
+	QuarantineDirectory = "/var/lib/mediagate/quarantine"
+	ClamAVSocketPath    = "/var/run/clamav/clamd.ctl"
+	ScanTimeout         = 30 * time.Second
 )
 
 var allowedMimeTypes = map[string]string{
@@ -35,9 +42,9 @@ var magicBytes = map[string][]byte{
 func main() {
 	log.Println("Starting MediaGate server on :8080...")
 
-	// Ensure upload directory exists with proper permissions
-	if err := os.MkdirAll(UploadDirectory, 0755); err != nil {
-		log.Fatal("Failed to create upload directory:", err)
+	// Ensure directories exist with proper permissions
+	if err := setupDirectories(); err != nil {
+		log.Fatal("Failed to setup directories:", err)
 	}
 
 	mux := http.NewServeMux()
@@ -45,6 +52,19 @@ func main() {
 	mux.HandleFunc("POST /upload", uploadHandler)
 
 	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func setupDirectories() error {
+	dirs := []string{UploadDirectory, TempDirectory, QuarantineDirectory}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+		log.Printf("Directory created/verified: %s", dir)
+	}
+
+	return nil
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +76,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 <body>
     <h1>MediaGate Profile Image Service</h1>
     <p>Accepted formats: JPEG, PNG, GIF, WebP (Max size: 5MB)</p>
+    <p><em>All uploads are scanned for malware</em></p>
     <form action="/upload" method="post" enctype="multipart/form-data">
         <label for="profile_image">Choose profile image:</label><br>
         <input type="file" id="profile_image" name="profile_image" accept="image/*"><br><br>
@@ -68,6 +89,10 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
+	// Create context with timeout for the entire upload process
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	// Limit request body size
 	r.Body = http.MaxBytesReader(w, r.Body, MaxFileSize)
 
@@ -129,37 +154,149 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate safe filename using UUID
 	fileID := uuid.New().String()
 	safeFilename := fileID + extension
-	filePath := filepath.Join(UploadDirectory, safeFilename)
 
-	// Create the destination file
-	dst, err := os.Create(filePath)
+	// Save to temporary directory first for scanning
+	tempFilePath := filepath.Join(TempDirectory, safeFilename)
+
+	// Create the temporary file with restrictive permissions
+	tempFile, err := os.OpenFile(tempFilePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
-		log.Printf("Failed to create file: %v", err)
-		http.Error(w, "Failed to create file", http.StatusInternalServerError)
+		log.Printf("Failed to create temp file: %v", err)
+		http.Error(w, "Failed to create temporary file", http.StatusInternalServerError)
 		return
 	}
-	defer dst.Close()
-
-	// Set restrictive file permissions
-	if err := dst.Chmod(0644); err != nil {
-		log.Printf("Failed to set file permissions: %v", err)
-	}
+	defer tempFile.Close()
+	defer os.Remove(tempFilePath) // Clean up temp file
 
 	// Copy file content with size limit
-	_, err = io.CopyN(dst, file, MaxFileSize)
+	_, err = io.CopyN(tempFile, file, MaxFileSize)
 	if err != nil && err != io.EOF {
-		log.Printf("Failed to save file: %v", err)
-		os.Remove(filePath) // Clean up on failure
+		log.Printf("Failed to save temp file: %v", err)
 		http.Error(w, "Failed to save file", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("File uploaded successfully: %s (original: %s, type: %s)",
+	// Close temp file before scanning
+	tempFile.Close()
+
+	// Scan file with ClamAV
+	scanResult, err := scanFileWithClamAV(ctx, tempFilePath)
+	if err != nil {
+		log.Printf("Virus scan failed: %v", err)
+		http.Error(w, "Virus scan failed", http.StatusInternalServerError)
+		return
+	}
+
+	if scanResult.Infected {
+		// Move infected file to quarantine
+		quarantinePath := filepath.Join(QuarantineDirectory, safeFilename)
+		if err := moveFile(tempFilePath, quarantinePath); err != nil {
+			log.Printf("Failed to quarantine infected file: %v", err)
+		}
+
+		log.Printf("SECURITY ALERT: Infected file quarantined: %s (original: %s, threat: %s)",
+			safeFilename, header.Filename, scanResult.ThreatName)
+
+		http.Error(w, "File contains malware and has been quarantined", http.StatusBadRequest)
+		return
+	}
+
+	// File is clean, move to final destination
+	finalFilePath := filepath.Join(UploadDirectory, safeFilename)
+	if err := moveFile(tempFilePath, finalFilePath); err != nil {
+		log.Printf("Failed to move clean file to uploads: %v", err)
+		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("File uploaded and scanned successfully: %s (original: %s, type: %s)",
 		safeFilename, header.Filename, contentType)
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"success": true, "filename": "%s", "file_id": "%s"}`,
+	fmt.Fprintf(w, `{"success": true, "filename": "%s", "file_id": "%s", "scanned": true}`,
 		safeFilename, fileID)
+}
+
+type ScanResult struct {
+	Infected   bool
+	ThreatName string
+}
+
+func scanFileWithClamAV(ctx context.Context, filePath string) (*ScanResult, error) {
+	// Create context with scan timeout
+	scanCtx, cancel := context.WithTimeout(ctx, ScanTimeout)
+	defer cancel()
+
+	// Use clamdscan for better performance with clamd daemon
+	cmd := exec.CommandContext(scanCtx, "clamdscan", "--fdpass", "--no-summary", filePath)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	// Parse clamdscan exit codes
+	result := &ScanResult{}
+
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			switch exitError.ExitCode() {
+			case 1:
+				// Infected file found
+				result.Infected = true
+				// Extract threat name from output
+				output := stdout.String()
+				if idx := strings.Index(output, "FOUND"); idx != -1 {
+					parts := strings.Fields(output[:idx])
+					if len(parts) > 0 {
+						result.ThreatName = parts[len(parts)-1]
+					}
+				}
+				return result, nil
+			case 2:
+				// Error occurred
+				return nil, fmt.Errorf("clamdscan error: %s", stderr.String())
+			default:
+				return nil, fmt.Errorf("clamdscan failed with exit code %d: %s",
+					exitError.ExitCode(), stderr.String())
+			}
+		}
+		return nil, fmt.Errorf("failed to run clamdscan: %w", err)
+	}
+
+	// Exit code 0 means clean file
+	result.Infected = false
+	return result, nil
+}
+
+func moveFile(src, dst string) error {
+	// Try atomic move first (works if on same filesystem)
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	// If rename fails, copy and delete
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		os.Remove(dst) // Clean up on failure
+		return err
+	}
+
+	// Remove source file after successful copy
+	return os.Remove(src)
 }
 
 func verifyMagicBytes(buffer []byte, contentType string) bool {
