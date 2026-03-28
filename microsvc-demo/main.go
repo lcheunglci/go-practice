@@ -9,9 +9,9 @@ import (
 func main() {
 	http.HandleFunc(
 		"/", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "Hello, world!")
+			fmt.Fprintln(w, "customer service")
 		})
 
-	log.Fatal(http.ListenAndServe(":3000", nil))
+	log.Fatal(http.ListenAndServeTLS(":3000", "./cert.pem", "./key.pem", nil))
 
 }
