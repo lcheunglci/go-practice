@@ -18,7 +18,7 @@ func main() {
 	}
 
 	go func() {
-		log.Fatal(http.ListenAndServeTLS("./cert.pem", "./key.pem"))
+		log.Fatal(s.ListenAndServeTLS("./cert.pem", "./key.pem"))
 	}()
 
 	fmt.Println("Server started, press <Enter> to shutdown")
