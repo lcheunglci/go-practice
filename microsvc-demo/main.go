@@ -1,6 +1,7 @@
 package microsvcdemo
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,16 @@ func main() {
 			fmt.Fprintln(w, "customer service")
 		})
 
-	log.Fatal(http.ListenAndServeTLS(":3000", "./cert.pem", "./key.pem", nil))
+	s := http.Server{
+		Addr: ":3000",
+	}
 
+	go func() {
+		log.Fatal(http.ListenAndServeTLS("./cert.pem", "./key.pem"))
+	}()
+
+	fmt.Println("Server started, press <Enter> to shutdown")
+	fmt.Scanln()
+	s.Shutdown(context.Background())
+	fmt.Println("Server stopped")
 }
