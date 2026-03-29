@@ -8,6 +8,13 @@ import (
 )
 
 func main() {
+
+	var handlerFunc http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, r.URL.String())
+	}
+
+	http.HandleFunc("/url/", handlerFunc)
+
 	http.HandleFunc(
 		"/", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintln(w, "customer service")
@@ -18,7 +25,7 @@ func main() {
 	}
 
 	go func() {
-		log.Fatal(s.ListenAndServeTLS("./cert.pem", "./key.pem"))
+		log.Fatal(s.ListenAndServe())
 	}()
 
 	fmt.Println("Server started, press <Enter> to shutdown")
