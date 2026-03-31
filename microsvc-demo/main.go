@@ -47,6 +47,9 @@ func (mh myHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Expires: time.Now().Add(24 * time.Hour * 365),
 	})
 	// r.Cookies()
+	// 202
+	w.WriteHeader(http.StatusAccepted)
+
 	fmt.Fprintln(w, string(mh))
 	fmt.Fprintln(w, r.Header)
 }
