@@ -39,5 +39,7 @@ func main() {
 type myHandler string
 
 func (mh myHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("X-Powered-By", "energetic gophers")
 	fmt.Fprintln(w, string(mh))
+	fmt.Fprintln(w, r.Header)
 }
