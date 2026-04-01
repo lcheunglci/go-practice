@@ -11,6 +11,10 @@ import (
 
 func main() {
 
+	http.HandleFunc("/servefile", func(w http.ResponseWriter, r *http.Request) {
+		// http.ServeFile(w, r, "./customers.csv")
+	})
+
 	http.HandleFunc("/fprint", func(w http.ResponseWriter, r *http.Request) {
 		customerFile, err := os.Open("./customers.csv")
 		if err != nil {
