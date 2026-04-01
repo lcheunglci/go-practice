@@ -3,13 +3,30 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/fprint", func(w http.ResponseWriter, r *http.Request) {
+		customerFile, err := os.Open("./customers.csv")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer customerFile.Close()
+
+		// data, err := io.ReadAll(customerFile)
+
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+
+		// fmt.Fprint(w, string(data))
+		io.Copy(w, customerFile)
 
 	})
 
