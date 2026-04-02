@@ -12,6 +12,9 @@ import (
 
 func main() {
 
+	// http://localhost:3000/files/customers.csv
+	http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir("."))))
+
 	http.HandleFunc("/servecontent", func(w http.ResponseWriter, r *http.Request) {
 		customerFile, err := os.Open("./customers.csv")
 		if err != nil {
