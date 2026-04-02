@@ -7,12 +7,24 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
 
+	http.HandleFunc("/servecontent", func(w http.ResponseWriter, r *http.Request) {
+		customerFile, err := os.Open("./customers.csv")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer customerFile.Close()
+
+		http.ServeContent(w, r, "customerdata.csv", time.Now(), customerFile)
+
+	})
+
 	http.HandleFunc("/servefile", func(w http.ResponseWriter, r *http.Request) {
-		// http.ServeFile(w, r, "./customers.csv")
+		http.ServeFile(w, r, "./customers.csv")
 	})
 
 	http.HandleFunc("/fprint", func(w http.ResponseWriter, r *http.Request) {
