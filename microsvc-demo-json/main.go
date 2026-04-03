@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,25 @@ import (
 )
 
 func main() {
+
+	http.HandleFunc("/customers", func(w http.ResponseWriter, r *http.Request) {
+		customers, err := readCustomers()
+		if err != nil {
+			log.Print(err)
+			w.WriteHeader((http.StatusInternalServerError))
+			return
+		}
+
+		data, err := json.Marshal(customers)
+		if err != nil {
+			log.Print(err)
+			w.WriteHeader((http.StatusInternalServerError))
+			return
+		}
+
+		w.Header().Add("content-type", "application/json")
+		w.Write(data)
+	})
 
 	s := http.Server{
 		Addr: ":3000",
