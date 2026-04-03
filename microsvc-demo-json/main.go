@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -10,9 +11,37 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 func main() {
+
+	http.HandleFunc("/customers/add", func(w http.ResponseWriter, r *http.Request) {
+		var c Customer
+		dec := json.NewDecoder(r.Body)
+		err := dec.Decode((&c))
+		if err != nil {
+			w.WriteHeader((http.StatusBadRequest))
+			return
+		}
+		log.Print(c)
+
+	})
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		_, err := http.Post("http://localhost:3000/customers/add",
+			"application/json", bytes.NewBuffer([]byte(`{
+					"id": 999,
+					"firstName": "Bob",
+					"lastName":  "Doe",
+					"address":   "123 Test St., Test, Test"
+				}
+			`)))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	http.HandleFunc("/customers", func(w http.ResponseWriter, r *http.Request) {
 		customers, err := readCustomers()
@@ -49,10 +78,10 @@ func main() {
 }
 
 type Customer struct {
-	ID        int
-	FirstName string
-	LastName  string
-	Address   string
+	ID        int    `json:"id"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Address   string `json:"address"`
 }
 
 func readCustomers() ([]Customer, error) {
