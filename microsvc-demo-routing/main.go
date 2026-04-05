@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 type Product struct {
@@ -17,7 +19,7 @@ type Product struct {
 
 func main() {
 
-	http.HandleFunc("/products", func(w http.ResponseWriter, *http.Request) {
+	http.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
 		data, err := json.Marshal(products)
 
 		if err != nil {
@@ -29,12 +31,21 @@ func main() {
 		w.Write(data)
 	})
 
+	// products/3
 	http.HandleFunc("/products/", func(w http.ResponseWriter, r *http.Request) {
-		idRaw := r.URL.Query().Get("id")
-		id, err := strconv.Atoi(idRaw)
+
+		parts := strings.Split(r.URL.Path, "/") // ["" "products" "3"]
+
+		if len(parts) != 3 {
+			w.WriteHeader((http.StatusBadRequest))
+			return
+		}
+
+		id, err := strconv.Atoi(parts[2])
+
 		if err != nil {
-			log.Println(err)
-			w.WriteHeader((http.StatusNotFound))
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		for _, p := range products {
