@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -29,6 +30,18 @@ func main() {
 	go func() {
 		scs.ListenAndServe()
 	}()
+
+	time.Sleep(1 * time.Second)
+	res, err := http.Get("http://localhost:5000/carts")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Response: ", string(data))
 
 	fmt.Println("Services started, press <Enter> to shutdown")
 	fmt.Scanln()
