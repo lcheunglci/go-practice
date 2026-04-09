@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -32,6 +33,16 @@ func main() {
 	}()
 
 	time.Sleep(1 * time.Second)
+
+	// replace customerId to 999 to see it detect and return invalid response
+	http.Post("http://localhost:5000/carts", "application/json", bytes.NewBufferString(`
+		{
+			"id": 1,
+			"customerId": 4,
+			"productIds: [ 1, 3] 
+		}
+	`))
+
 	res, err := http.Get("http://localhost:5000/carts")
 	if err != nil {
 		log.Fatal(err)
@@ -165,8 +176,10 @@ func createCustomerService() *http.Server {
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
-				w.Header().Add("Content-Type", "application/json")
-				w.Write(data)
+				if r.Method == http.MethodGet {
+					w.Header().Add("Content-Type", "application/json")
+					w.Write(data)
+				}
 				return
 			}
 		}
