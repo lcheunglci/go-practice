@@ -7,12 +7,11 @@
 package productpb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protocol"
 )
 
 const (
@@ -101,7 +100,7 @@ const file_product_proto_rawDesc = "" +
 	"\n" +
 	"usdPerUnit\x18\x03 \x01(\x01R\n" +
 	"usdPerUnit\x12\x12\n" +
-	"\x04unit\x18\x04 \x01(\tR\x04unitB\x1aZ\x18packageservice/productpbb\x06proto3"
+	"\x04unit\x18\x04 \x01(\tR\x04unitB\x1aZ\x18productservice/productpbb\x06proto3"
 
 var (
 	file_product_proto_rawDescOnce sync.Once
