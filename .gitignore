@@ -32,3 +32,6 @@ go.work.sum
 # .vscode/
 microsvc-demo/key.pem
 microsvc-demo/cert.pem
+secure-comm-demo-certs/certs/server.crt
+.gitignore
+secure-comm-demo-certs/certs/server.key
