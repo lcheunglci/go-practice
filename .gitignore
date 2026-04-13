@@ -35,3 +35,6 @@ microsvc-demo/cert.pem
 secure-comm-demo-certs/certs/server.crt
 .gitignore
 secure-comm-demo-certs/certs/server.key
+secure-comm-demo-certs/certs/client.key
+secure-comm-demo-certs/certs/ca.crt
+secure-comm-demo-certs/certs/client.crt
