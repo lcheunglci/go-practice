@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,9 +20,10 @@ import (
 )
 
 type Payment struct {
-	ID     string  `json:"id"`
-	Amount float64 `json:"amount"`
-	Status string  `json:"status"`
+	ID       string  `json:"id"`
+	Amount   float64 `json:"amount"`
+	Status   string  `json:"status"`
+	Customer string  `json:"-"`
 }
 
 type ClearingHouseClient struct {
@@ -119,7 +121,6 @@ func connectToDatabase() (*pgxpool.Pool, error) {
 }
 
 func startClearingHouseMock() {
-
 	certFile := filepath.Join("certs", "server.crt")
 	keyFile := filepath.Join("certs", "server.key")
 	caCertFile := filepath.Join("certs", "ca.crt")
@@ -157,6 +158,46 @@ func startClearingHouseMock() {
 
 	log.Println("Clearing house mock starting on :9443")
 	server.ListenAndServeTLS(certFile, keyFile)
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		allowedOrigins := []string{"https://dashboard.atlaspay.com", "https://admin.atlaspay.com"}
+
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Max-Age", "3600")
+				break
+			}
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func securityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sanitizeLogContext(r *http.Request) {
+	r.URL.RawQuery = strings.ReplaceAll(r.URL.RawQuery, "customer_id=", "customer_id=***")
+	r.URL.RawQuery = strings.ReplaceAll(r.URL.RawQuery, "api_key=", "api_key=***")
 }
 
 func main() {
@@ -204,34 +245,59 @@ func main() {
 	db, _ := connectToDatabase()
 	defer db.Close()
 
-	http.HandleFunc("GET /payments", handlePayments(clearingClient))
-	http.HandleFunc("GET /health", handleHealth)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /payments", handlePayments(clearingClient))
+	mux.HandleFunc("GET /session", handleSession)
+	mux.HandleFunc("GET /health", handleHealth)
 
 	server := &http.Server{
 		Addr:      ":8443",
 		TLSConfig: tlsConfig,
+		Handler:   corsMiddleware(securityMiddleware(mux)),
 	}
 
-	log.Println("AtlasPay API starting on :8443 with certificate pinning and database TLS")
+	log.Println("AtlasPay API starting on :8443 with full security controls")
 	log.Fatal(server.ListenAndServeTLS("", ""))
 }
 
 func handlePayments(client *ClearingHouseClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		payments := []Payment{
-			{ID: "PAY-001", Amount: 50000.00, Status: "completed"},
-			{ID: "PAY-002", Amount: 125000.00, Status: "pending"},
+		var payment Payment
+		if err := json.NewDecoder(r.Body).Decode(&payment); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
 		}
 
-		if err := client.SubmitPayment("PAY-002"); err != nil {
+		sanitizeLogContext(r)
+		log.Printf("Processing payment %s from %s", payment.ID, r.URL.String())
+
+		if err := client.SubmitPayment(payment.ID); err != nil {
 			log.Printf("Failed to submit payment to clearing house: %v", err)
 		} else {
-			log.Println("Payment PAY-002 submitted to clearing house")
+			log.Printf("Payment %s submitted to clearing house", payment.ID)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(payments)
+		json.NewEncoder(w).Encode(payment)
 	}
+}
+
+func handleSession(w http.ResponseWriter, r *http.Request) {
+	sessionToken := "abc123sessiontoken"
+
+	cookie := &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionToken,
+		Path:     "/",
+		MaxAge:   3600,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+
+	http.SetCookie(w, cookie)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Session created"))
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
