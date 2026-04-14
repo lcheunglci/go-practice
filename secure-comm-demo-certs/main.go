@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Payment struct {
@@ -85,6 +88,34 @@ func (c *ClearingHouseClient) SubmitPayment(paymentID string) error {
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+func connectToDatabase() (*pgxpool.Pool, error) {
+	clientCert, _ := tls.LoadX509KeyPair(
+		filepath.Join("certs", "db-client.crt"),
+		filepath.Join("certs", "db-client.key"),
+	)
+
+	caCertPEM, _ := os.ReadFile(filepath.Join("certs", "db-ca.crt"))
+	caPool := x509.NewCertPool()
+	caPool.AppendCertsFromPEM(caCertPEM)
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      caPool,
+		ServerName:   "postgres.internal",
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	config, _ := pgxpool.ParseConfig("postgres://<app_name>:<placeholderpwd>@postgres.internal:5432/payments?sslmode=verify-full")
+	config.ConnConfig.TLSConfig = tlsConfig
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		return nil, err
+	}
+
+	return pool, nil
 }
 
 func startClearingHouseMock() {
@@ -170,6 +201,9 @@ func main() {
 
 	clearingClient := NewClearingHouseClient(pinnedFingerprint)
 
+	db, _ := connectToDatabase()
+	defer db.Close()
+
 	http.HandleFunc("GET /payments", handlePayments(clearingClient))
 	http.HandleFunc("GET /health", handleHealth)
 
@@ -178,7 +212,7 @@ func main() {
 		TLSConfig: tlsConfig,
 	}
 
-	log.Println("AtlasPay API starting on :8443 with certificate pinning")
+	log.Println("AtlasPay API starting on :8443 with certificate pinning and database TLS")
 	log.Fatal(server.ListenAndServeTLS("", ""))
 }
 
