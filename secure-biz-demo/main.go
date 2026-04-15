@@ -1,11 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type EmailChangeState string
@@ -34,30 +39,95 @@ type ChangeEmailRequestPayload struct {
 	NewEmail string `json:"new_email"`
 }
 
+type IdempotencyRecord struct {
+	RequestID string
+	Response  any
+	ExpiresAt time.Time
+}
+
 type ProfileService struct {
-	users         map[string]*User
-	emailRequests map[string]*EmailChangeRequest
-	requestIDGen  int
+	users             map[string]*User
+	emailRequests     map[string]*EmailChangeRequest
+	requestIDGen      int
+	mu                sync.RWMutex
+	idempotencyStore  map[string]*IdempotencyRecord
+	idempotencyMu     sync.RWMutex
+	confirmationGroup singleflight.Group
 }
 
 func NewProfileService() *ProfileService {
 	return &ProfileService{
-		users:         make(map[string]*User),
-		emailRequests: make(map[string]*EmailChangeRequest),
-		requestIDGen:  0,
+		users:            make(map[string]*User),
+		emailRequests:    make(map[string]*EmailChangeRequest),
+		requestIDGen:     0,
+		idempotencyStore: make(map[string]*IdempotencyRecord),
 	}
 }
 
 func (ps *ProfileService) GetUser(userID string) *User {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
 	return ps.users[userID]
 }
 
 func (ps *ProfileService) GetEmailChangeRequest(requestID string) *EmailChangeRequest {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
 	return ps.emailRequests[requestID]
 }
 
-// State machine transition guards
+// Idempotency key generation and checking
+func (ps *ProfileService) generateIdempotencyKey(userID, newEmail string) string {
+	data := fmt.Sprintf("%s:%s", userID, newEmail)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
+
+func (ps *ProfileService) checkIdempotency(key string) (*IdempotencyRecord, bool) {
+	ps.idempotencyMu.RLock()
+	defer ps.idempotencyMu.RUnlock()
+
+	record, exists := ps.idempotencyStore[key]
+	if !exists {
+		return nil, false
+	}
+
+	if time.Now().After(record.ExpiresAt) {
+		// Expired, will be cleaned up later
+		return nil, false
+	}
+
+	return record, true
+}
+
+func (ps *ProfileService) storeIdempotency(key, requestID string, response any) {
+	ps.idempotencyMu.Lock()
+	defer ps.idempotencyMu.Unlock()
+
+	ps.idempotencyStore[key] = &IdempotencyRecord{
+		RequestID: requestID,
+		Response:  response,
+		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour TTL
+	}
+}
+
+func (ps *ProfileService) cleanupExpiredIdempotencyRecords() {
+	ps.idempotencyMu.Lock()
+	defer ps.idempotencyMu.Unlock()
+
+	now := time.Now()
+	for key, record := range ps.idempotencyStore {
+		if now.After(record.ExpiresAt) {
+			delete(ps.idempotencyStore, key)
+		}
+	}
+}
+
+// State machine transition guards (now thread-safe)
 func (ps *ProfileService) CanRequestEmailChange(userID string) error {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
 	// Check if user exists
 	if ps.users[userID] == nil {
 		return fmt.Errorf("user not found")
@@ -74,6 +144,9 @@ func (ps *ProfileService) CanRequestEmailChange(userID string) error {
 }
 
 func (ps *ProfileService) CanMarkPendingVerification(requestID string) error {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
 	req := ps.emailRequests[requestID]
 	if req == nil {
 		return fmt.Errorf("request not found")
@@ -87,6 +160,9 @@ func (ps *ProfileService) CanMarkPendingVerification(requestID string) error {
 }
 
 func (ps *ProfileService) CanConfirmEmailChange(requestID string) error {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
 	req := ps.emailRequests[requestID]
 	if req == nil {
 		return fmt.Errorf("request not found")
@@ -99,8 +175,11 @@ func (ps *ProfileService) CanConfirmEmailChange(requestID string) error {
 	return nil
 }
 
-// State machine operations
+// State machine operations (now thread-safe)
 func (ps *ProfileService) RequestEmailChange(userID, newEmail string) (*EmailChangeRequest, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
 	if err := ps.CanRequestEmailChange(userID); err != nil {
 		return nil, err
 	}
@@ -121,6 +200,9 @@ func (ps *ProfileService) RequestEmailChange(userID, newEmail string) (*EmailCha
 }
 
 func (ps *ProfileService) MarkPendingVerification(requestID string) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
 	if err := ps.CanMarkPendingVerification(requestID); err != nil {
 		return err
 	}
@@ -130,6 +212,9 @@ func (ps *ProfileService) MarkPendingVerification(requestID string) error {
 }
 
 func (ps *ProfileService) ConfirmEmailChange(requestID string) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
 	if err := ps.CanConfirmEmailChange(requestID); err != nil {
 		return err
 	}
@@ -144,7 +229,7 @@ func (ps *ProfileService) ConfirmEmailChange(requestID string) error {
 	return nil
 }
 
-// HTTP handlers
+// HTTP handlers with idempotency support
 func (ps *ProfileService) requestEmailChangeHandler(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-ID")
 	if userID == "" {
@@ -158,11 +243,29 @@ func (ps *ProfileService) requestEmailChangeHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Check for idempotency key in header
+	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if idempotencyKey == "" {
+		// Generate one based on request content
+		idempotencyKey = ps.generateIdempotencyKey(userID, payload.NewEmail)
+	}
+
+	// Check if we've seen this request before
+	if record, exists := ps.checkIdempotency(idempotencyKey); exists {
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(record.Response)
+		return
+	}
+
+	// Process the request
 	req, err := ps.RequestEmailChange(userID, payload.NewEmail)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Store for idempotency
+	ps.storeIdempotency(idempotencyKey, req.ID, req)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(req)
@@ -191,7 +294,14 @@ func (ps *ProfileService) confirmEmailChangeHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if err := ps.ConfirmEmailChange(requestID); err != nil {
+	// Use singleflight to prevent concurrent confirmations of the same request
+	result, err, _ := ps.confirmationGroup.Do(requestID, func() (any, error) {
+		return nil, ps.ConfirmEmailChange(requestID)
+	})
+
+	_ = result // result is nil in this case, we only care about the error
+
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -208,6 +318,15 @@ func main() {
 		ID:    "user1",
 		Email: "old@example.com",
 	}
+
+	// Start cleanup goroutine for expired idempotency records
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			service.cleanupExpiredIdempotencyRecords()
+		}
+	}()
 
 	http.HandleFunc("/request-email-change", service.requestEmailChangeHandler)
 	http.HandleFunc("/mark-pending", service.markPendingHandler)
